@@ -1,0 +1,109 @@
+[gd_scene format=3 uid="uid://ci0agdqwgd8j1"]
+
+[ext_resource type="Script" uid="uid://bmombde6y4i2a" path="res://world.gd" id="1_world"]
+[ext_resource type="Script" uid="uid://bk5eeh1xrk5qb" path="res://camera_controller.gd" id="2_camera"]
+[ext_resource type="Script" uid="uid://ui2qhislxx7m" path="res://brush_preview.gd" id="3_preview"]
+[ext_resource type="Script" uid="uid://dol86w7oenkrf" path="res://god_tools.gd" id="4_tools"]
+
+[node name="Main" type="Node2D" unique_id=798858363]
+script = ExtResource("1_world")
+
+[node name="TileMapLayer" type="TileMapLayer" parent="." unique_id=947271671]
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=902575339]
+position = Vector2(1024, 1024)
+script = ExtResource("2_camera")
+
+[node name="BrushPreview" type="Node2D" parent="." unique_id=2110144841]
+script = ExtResource("3_preview")
+
+[node name="GodTools" type="CanvasLayer" parent="." unique_id=843312694 node_paths=PackedStringArray("world", "brush_preview")]
+script = ExtResource("4_tools")
+world = NodePath("..")
+brush_preview = NodePath("../BrushPreview")
+
+[node name="MarginContainer" type="MarginContainer" parent="GodTools" unique_id=1953968782]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 80.0
+grow_horizontal = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="PanelContainer" type="PanelContainer" parent="GodTools/MarginContainer" unique_id=145428086]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="GodTools/MarginContainer/PanelContainer" unique_id=1664132326]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="BtnLand" type="Button" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=556379210]
+layout_mode = 2
+toggle_mode = true
+text = " 1: Суша "
+
+[node name="BtnMountain" type="Button" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=2038928511]
+layout_mode = 2
+toggle_mode = true
+text = " 2: Горы "
+
+[node name="BtnWater" type="Button" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=494567950]
+layout_mode = 2
+toggle_mode = true
+text = " 3: Вода "
+
+[node name="VSeparator1" type="VSeparator" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=919381058]
+layout_mode = 2
+
+[node name="BtnBrushMinus" type="Button" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=1483183055]
+layout_mode = 2
+text = " - "
+
+[node name="LblBrushSize" type="Label" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=1547926192]
+layout_mode = 2
+text = "Кисть: 1x1"
+
+[node name="BtnBrushPlus" type="Button" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=666125392]
+layout_mode = 2
+text = " + "
+
+[node name="VSeparator2" type="VSeparator" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=204312010]
+layout_mode = 2
+
+[node name="LblStatus" type="Label" parent="GodTools/MarginContainer/PanelContainer/HBoxContainer" unique_id=1351574162]
+layout_mode = 2
+size_flags_horizontal = 3
+text = " Активный инструмент: Суша (Равнина) [1]"
+
+[node name="InfoMargin" type="MarginContainer" parent="GodTools" unique_id=1130975649]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -140.0
+offset_right = 450.0
+grow_vertical = 0
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="InfoPanel" type="PanelContainer" parent="GodTools/InfoMargin" unique_id=2137822607]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="GodTools/InfoMargin/InfoPanel" unique_id=1322465633]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="LblInfo" type="Label" parent="GodTools/InfoMargin/InfoPanel/Margin" unique_id=551523918]
+layout_mode = 2
+text = "Управление:
+• ПКМ / СКМ + Перетаскивание — Движение камеры
+• Колесико мыши — Масштаб (Зум)
+• ЛКМ — Рисование ландшафта
+• Горячие клавиши [1], [2], [3] — Инструменты
+• Ctrl + Колесико мыши (или клавиши [ / ]) — Размер кисти"
