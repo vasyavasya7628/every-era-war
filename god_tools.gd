@@ -10,6 +10,7 @@ var current_tool: WorldScript.TerrainType = WorldScript.TerrainType.PLAIN
 var brush_size: int = 1 # 1 = 1x1, 2 = 3x3, 3 = 5x5, 4 = 7x7
 
 var is_painting: bool = false
+var is_god_mode: bool = true  # Start in God Mode (terrain painting)
 @export var world: Node2D
 @export var brush_preview: Node2D
 
@@ -31,6 +32,7 @@ func _ready() -> void:
 	btn_brush_plus.pressed.connect(func(): set_brush_size(brush_size + 1))
 	
 	update_ui()
+	_update_mode_visibility()
 
 func set_tool(tool_type: WorldScript.TerrainType) -> void:
 	current_tool = tool_type
@@ -79,7 +81,8 @@ func _input(event: InputEvent) -> void:
 				set_brush_size(brush_size - 1)
 			KEY_BRACKETRIGHT:
 				set_brush_size(brush_size + 1)
-				
+			KEY_G:
+				toggle_god_mode()
 	# Mouse wheel + Ctrl for brush size adjust
 	if event is InputEventMouseButton and event.pressed:
 		if event.ctrl_pressed:
@@ -91,6 +94,9 @@ func _input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not is_god_mode:
+		return  # Disable terrain painting in Play Mode
+	
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			is_painting = event.pressed
@@ -118,4 +124,20 @@ func _update_brush_preview() -> void:
 	var tile_coords: Vector2i = world.world_to_tile(mouse_world_pos)
 	
 	if brush_preview.has_method("update_preview"):
-		brush_preview.update_preview(tile_coords, brush_size, world.is_valid_coords(tile_coords))
+		brush_preview.update_preview(tile_coords, brush_size, world.is_valid_coords(tile_coords) and is_god_mode)
+
+func toggle_god_mode() -> void:
+	is_god_mode = not is_god_mode
+	is_painting = false
+	_update_mode_visibility()
+
+func _update_mode_visibility() -> void:
+	# Show/hide terrain painting UI based on mode
+	var toolbar := $MarginContainer
+	var info := $InfoMargin
+	if toolbar:
+		toolbar.visible = is_god_mode
+	if info:
+		info.visible = is_god_mode
+	if brush_preview:
+		brush_preview.visible = is_god_mode

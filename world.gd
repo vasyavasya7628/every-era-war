@@ -11,6 +11,10 @@ const MAP_WIDTH: int = 128
 const MAP_HEIGHT: int = 128
 const TILE_SIZE: int = 16
 
+# ─── Resource & Building tracking ────────────────────────────────────
+var resource_nodes: Array = []       # All ResourceNode instances on the map
+var occupied_tiles: Dictionary = {}  # Vector2i -> true for tiles with buildings
+
 # Tile atlas coordinates (Source ID: 0)
 const ATLAS_WATER: Vector2i = Vector2i(0, 0)
 const ATLAS_SHALLOW_WATER: Vector2i = Vector2i(1, 0)
@@ -29,6 +33,14 @@ func _ready() -> void:
 	_setup_tileset()
 	_init_grid()
 	_generate_initial_world()
+	_spawn_resources()
+	# Initialize RTS game systems after world is ready
+	call_deferred("_init_game_systems")
+
+func _init_game_systems() -> void:
+	var bootstrap := GameBootstrap.new()
+	bootstrap.name = "GameBootstrap"
+	bootstrap.initialize(self)
 
 func _setup_tileset() -> void:
 	if tile_map_layer == null:
@@ -179,7 +191,7 @@ func _update_cell_visual(x: int, y: int) -> void:
 				atlas_pos = ATLAS_PLAIN
 		TerrainType.MOUNTAIN:
 			if has_water_neighbor:
-				atlas_pos = ATLAS_WATER
+				atlas_pos = ATLAS_MOUNTAIN
 			else:
 				atlas_pos = ATLAS_MOUNTAIN
 				
@@ -217,3 +229,97 @@ func world_to_tile(world_pos: Vector2) -> Vector2i:
 
 func tile_to_world(tile_coords: Vector2i) -> Vector2:
 	return Vector2(tile_coords.x * TILE_SIZE, tile_coords.y * TILE_SIZE)
+
+# ─── Resource Spawning ───────────────────────────────────────────────
+
+func _spawn_resources() -> void:
+	# Spawn resource nodes on PLAIN tiles
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 42  # Deterministic for reproducibility
+	
+	# Cluster definitions: [type, cluster_count, nodes_per_cluster]
+	var clusters: Array = [
+		[GameData.ResourceType.WOOD,  40, 3],
+		[GameData.ResourceType.ORE,   15, 2],
+		[GameData.ResourceType.GOLD,  10, 1],
+		[GameData.ResourceType.STONE, 15, 2],
+	]
+	
+	for cluster_def in clusters:
+		var res_type: GameData.ResourceType = cluster_def[0]
+		var cluster_count: int = cluster_def[1]
+		var per_cluster: int = cluster_def[2]
+		
+		for _c in range(cluster_count):
+			# Pick random center on PLAIN terrain
+			var center := _find_random_plain_tile(rng)
+			if center == Vector2i(-1, -1):
+				continue
+			
+			for _n in range(per_cluster):
+				var offset := Vector2i(rng.randi_range(-2, 2), rng.randi_range(-2, 2))
+				var tile := center + offset
+				if not is_valid_coords(tile):
+					continue
+				if grid[tile.x][tile.y] != TerrainType.PLAIN:
+					continue
+				if _has_resource_at(tile):
+					continue
+				
+				var node := ResourceNode.create(res_type, tile, TILE_SIZE)
+				add_child(node)
+				resource_nodes.append(node)
+
+func _find_random_plain_tile(rng: RandomNumberGenerator) -> Vector2i:
+	for _attempt in range(50):
+		var x := rng.randi_range(0, MAP_WIDTH - 1)
+		var y := rng.randi_range(0, MAP_HEIGHT - 1)
+		if grid[x][y] == TerrainType.PLAIN:
+			return Vector2i(x, y)
+	return Vector2i(-1, -1)
+
+func _has_resource_at(tile: Vector2i) -> bool:
+	for node in resource_nodes:
+		if node.tile_position == tile:
+			return true
+	return false
+
+# ─── Building Tile Tracking ──────────────────────────────────────────
+
+func register_building_tiles(building: Building) -> void:
+	for tile in building.get_occupied_tiles():
+		occupied_tiles[tile] = true
+
+func unregister_building_tiles(building: Building) -> void:
+	for tile in building.get_occupied_tiles():
+		occupied_tiles.erase(tile)
+
+func is_tile_occupied(tile: Vector2i) -> bool:
+	return occupied_tiles.has(tile)
+
+# ─── Resource Queries ────────────────────────────────────────────────
+
+func get_nearest_resource(pos: Vector2, type: GameData.ResourceType = -1) -> ResourceNode:
+	var best: ResourceNode = null
+	var best_dist: float = INF
+	for node in resource_nodes:
+		if type >= 0 and node.resource_type != type:
+			continue
+		if not node.can_gather():
+			continue
+		var dist := pos.distance_to(node.global_position)
+		if dist < best_dist:
+			best_dist = dist
+			best = node
+	return best
+
+func is_buildable(tile: Vector2i) -> bool:
+	if not is_valid_coords(tile):
+		return false
+	if grid[tile.x][tile.y] != TerrainType.PLAIN:
+		return false
+	if is_tile_occupied(tile):
+		return false
+	if _has_resource_at(tile):
+		return false
+	return true
