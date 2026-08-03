@@ -125,7 +125,7 @@ func _process_builder(delta: float) -> void:
 			_set_role(GameData.UnitRole.IDLE)
 			return
 
-	var bld_center := target_building.position + Vector2(
+	var bld_center: Vector2 = target_building.position + Vector2(
 		target_building.bld_size.x * World.TILE_SIZE / 2.0,
 		target_building.bld_size.y * World.TILE_SIZE / 2.0
 	)

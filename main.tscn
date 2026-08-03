@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://ci0agdqwgd8j1"]
 
-[ext_resource type="Script" uid="uid://bmombde6y4i2a" path="res://world.gd" id="1_world"]
-[ext_resource type="Script" uid="uid://bk5eeh1xrk5qb" path="res://camera_controller.gd" id="2_camera"]
-[ext_resource type="Script" uid="uid://ui2qhislxx7m" path="res://brush_preview.gd" id="3_preview"]
-[ext_resource type="Script" uid="uid://dol86w7oenkrf" path="res://god_tools.gd" id="4_tools"]
+[ext_resource type="Script" uid="uid://b5vv1du60b1r1" path="res://world/world.gd" id="1_world"]
+[ext_resource type="Script" uid="uid://chkrs3ihogwxh" path="res://camera/camera_controller.gd" id="2_camera"]
+[ext_resource type="Script" uid="uid://dgp5abm6jjiru" path="res://tools/brush_preview.gd" id="3_preview"]
+[ext_resource type="Script" uid="uid://y2kcxbsm2vi" path="res://tools/god_tools.gd" id="4_tools"]
 
 [node name="Main" type="Node2D" unique_id=798858363]
 script = ExtResource("1_world")
@@ -81,8 +81,10 @@ text = " Активный инструмент: Суша (Равнина) [1]"
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
-offset_top = -140.0
-offset_right = 450.0
+offset_left = 637.0
+offset_top = -194.0
+offset_right = 1165.0
+offset_bottom = 11.0
 grow_vertical = 0
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 16

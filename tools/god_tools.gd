@@ -1,7 +1,7 @@
 class_name GodTools
 extends CanvasLayer
 
-const WorldScript = preload("res://world.gd")
+const WorldScript = preload("res://world/world.gd")
 
 signal tool_changed(tool_type: WorldScript.TerrainType)
 signal brush_size_changed(size: int)

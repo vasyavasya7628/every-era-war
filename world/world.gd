@@ -51,7 +51,7 @@ func _setup_tileset() -> void:
 	# Create procedural tile texture image
 	var img := _create_tileset_image()
 	# Save image to res:// for texture editor inspection
-	img.save_png("res://tileset.png")
+	img.save_png("res://world/tileset.png")
 	
 	var tex := ImageTexture.create_from_image(img)
 	
