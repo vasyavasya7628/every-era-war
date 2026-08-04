@@ -29,6 +29,12 @@ const ATLAS_ROCKY_SHORE: Vector2i = Vector2i(2, 1)
 # 2D Grid storing base TerrainType for each cell: grid[x][y]
 var grid: Array = []
 
+# Helper to check if a tile is land (plain)
+func is_land_tile(tile: Vector2i) -> bool:
+	if not is_valid_coords(tile):
+		return false
+	return grid[tile.x][tile.y] == TerrainType.PLAIN
+
 func _ready() -> void:
 	_setup_tileset()
 	_init_grid()
@@ -40,6 +46,7 @@ func _ready() -> void:
 func _init_game_systems() -> void:
 	var bootstrap := GameBootstrap.new()
 	bootstrap.name = "GameBootstrap"
+	add_child(bootstrap)
 	bootstrap.initialize(self)
 
 func _setup_tileset() -> void:
@@ -120,8 +127,8 @@ func _init_grid() -> void:
 
 func _generate_initial_world() -> void:
 	# Create a central island surrounded by ocean
-	var center_x := MAP_WIDTH / 2
-	var center_y := MAP_HEIGHT / 2
+	var center_x := MAP_WIDTH >> 1
+	var center_y := MAP_HEIGHT >> 1
 	var island_radius := 35
 	
 	for x in range(MAP_WIDTH):
@@ -299,7 +306,7 @@ func is_tile_occupied(tile: Vector2i) -> bool:
 
 # ─── Resource Queries ────────────────────────────────────────────────
 
-func get_nearest_resource(pos: Vector2, type: GameData.ResourceType = -1) -> ResourceNode:
+func get_nearest_resource(pos: Vector2, type: GameData.ResourceType = GameData.ResourceType.NONE) -> ResourceNode:
 	var best: ResourceNode = null
 	var best_dist: float = INF
 	for node in resource_nodes:

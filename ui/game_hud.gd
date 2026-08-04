@@ -229,7 +229,7 @@ func _update_faction_info() -> void:
 	if lbl_development:
 		lbl_development.text = "Development: %d" % player_faction.development_level
 	if lbl_territory:
-		lbl_territory.text = "Territory: %d tiles" % player_faction.territory_radius
+		lbl_territory.text = "Territory: %d tiles" % player_faction.territory_tiles.size()
 
 func _update_action_buttons() -> void:
 	# Update spawn button visual state
@@ -277,7 +277,7 @@ func _on_build_pressed(btype: GameData.BuildingType) -> void:
 
 # ─── Events ──────────────────────────────────────────────────────────
 
-func _on_combat(attacker: Faction, defender: Faction, result: String) -> void:
+func _on_combat(_attacker: Faction, _defender: Faction, result: String) -> void:
 	if combat_log_label:
 		combat_log_label.text = "⚔ " + result
 		combat_log_timer = 8.0

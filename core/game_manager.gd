@@ -3,279 +3,270 @@ extends Node
 
 # ─── References ──────────────────────────────────────────────────────
 var world: World = null
-var factions: Array = []  # Array of Faction nodes
-var player_faction: Faction = null
+var factions: Array = []   # Array of Faction nodes (dynamically created)
 
-# ─── War Timer ───────────────────────────────────────────────────────
-var war_check_timer: float = 0.0
+# ─── Territory Expansion ─────────────────────────────────────────────
+var territory_expand_timer: float = 0.0
 
 # ─── Game State ──────────────────────────────────────────────────────
 var game_started: bool = false
-var game_over: bool = false
 
-signal faction_defeated(faction: Faction)
-signal game_over_signal(winner: Faction)
-signal combat_occurred(attacker: Faction, defender: Faction, result: String)
+# ─── Pending Units (spawned but not yet in a faction) ────────────────
+## Units that have been spawned but are waiting for a partner to form a faction.
+var pending_units: Array = []
+
+# ─── Faction-formation state machine ─────────────────────────────────
+## Tracks which factions are still in the "auto-gather + build" startup phase.
+## Value: "gather" | "build" | "done"
+var faction_phase: Dictionary = {}   # Faction -> String
+
+# Used to assign incrementing faction IDs
+var _next_faction_id: int = 0
+
+signal faction_formed(faction: Faction)
 
 func initialize(world_ref: World) -> void:
 	world = world_ref
-	_create_factions()
 	game_started = true
 
-# ─── Faction Creation ────────────────────────────────────────────────
+# ─── Unit Registration (called from UnitSpawner) ─────────────────────
 
-func _create_factions() -> void:
-	var map_w: int = World.MAP_WIDTH
-	var map_h: int = World.MAP_HEIGHT
+## Called each time the player spawns a new human.
+## Checks if the new unit is close enough to an existing pending unit to form a faction.
+func register_unit(unit: Unit) -> void:
+	# Clean up freed references first
+	pending_units = pending_units.filter(func(u): return u != null and is_instance_valid(u))
 
-	# Player faction — center-south of the island
-	var player_center := Vector2i(map_w / 2, int(map_h * 0.65))
-	player_faction = Faction.create(0, "Player", Color("3b82f6"), player_center, true)
-	_add_faction(player_faction)
+	# Check against existing pending units for proximity pairing
+	for existing in pending_units:
+		if unit.global_position.distance_to(existing.global_position) <= GameData.PAIR_DISTANCE:
+			# Form a faction between existing (leader) and new unit (follower)
+			_form_faction(existing, unit)
+			pending_units.erase(existing)
+			return
 
-	# AI Faction 1 — north-west
-	var ai1_center := Vector2i(int(map_w * 0.3), int(map_h * 0.3))
-	var ai1 := Faction.create(1, "Red Horde", Color("ef4444"), ai1_center, false)
-	_add_faction(ai1)
+	# No nearby partner — add to pending list; this unit will form a lone faction
+	# Give solo humans their own solo faction immediately so they can act
+	_form_solo_faction(unit)
 
-	# AI Faction 2 — north-east
-	var ai2_center := Vector2i(int(map_w * 0.7), int(map_h * 0.3))
-	var ai2 := Faction.create(2, "Green Realm", Color("22c55e"), ai2_center, false)
-	_add_faction(ai2)
+## Creates a faction for a lone unit (no partner nearby).
+func _form_solo_faction(unit: Unit) -> void:
+	var col := Color.from_hsv(randf(), 0.7, 0.9)
+	var center_tile := world.world_to_tile(unit.global_position)
+	center_tile = _find_nearest_plain(center_tile)
 
-	# Adjust faction centers to valid PLAIN tiles
-	for faction in factions:
-		faction.territory_center = _find_nearest_plain(faction.territory_center)
-
-	# Spawn initial units and town centres for each faction
-	for faction in factions:
-		_spawn_town_centre(faction)
-		_spawn_initial_units(faction)
-
-func _add_faction(faction: Faction) -> void:
-	factions.append(faction)
+	var faction := Faction.create(_next_faction_id, "Tribe %d" % _next_faction_id, col, center_tile, true)
+	_next_faction_id += 1
 	world.add_child(faction)
+	factions.append(faction)
+
+	# Assign unit to faction
+	unit.faction = faction
+	faction.units.append(unit)
+	faction.leader = unit
+	unit.is_leader = true
+
+	# Begin gather phase
+	faction_phase[faction] = "gather"
+	faction_formed.emit(faction)
+
+## Creates a two-member faction: leader = first_unit, follower = second_unit.
+func _form_faction(leader_unit: Unit, follower_unit: Unit) -> void:
+	var col := Color.from_hsv(randf(), 0.7, 0.9)
+
+	# Territory center = midpoint between the two units
+	var mid := (leader_unit.global_position + follower_unit.global_position) / 2.0
+	var center_tile := world.world_to_tile(mid)
+	center_tile = _find_nearest_plain(center_tile)
+
+	var faction := Faction.create(_next_faction_id, "Tribe %d" % _next_faction_id, col, center_tile, true)
+	_next_faction_id += 1
+	world.add_child(faction)
+	factions.append(faction)
+
+	# Assign units — first spawned is leader
+	faction.leader = leader_unit
+	leader_unit.is_leader = true
+	follower_unit.is_leader = false
+
+	for u in [leader_unit, follower_unit]:
+		u.faction = faction
+		faction.units.append(u)
+		u.queue_redraw()
+
+	# Both units: set the follower's leader reference
+	follower_unit.leader_ref = leader_unit
+
+	# Begin gather phase for this faction
+	faction_phase[faction] = "gather"
+	faction_formed.emit(faction)
+
+# ─── Game Loop ───────────────────────────────────────────────────────
+
+func _process(delta: float) -> void:
+	if not game_started:
+		return
+
+	# Territory auto-expansion tick
+	territory_expand_timer += delta
+	if territory_expand_timer >= GameData.TERRITORY_EXPAND_INTERVAL:
+		territory_expand_timer = 0.0
+		for faction in factions:
+			if faction.units.size() > 0 or faction.buildings.size() > 0:
+				faction.expand_territory()
+
+	# Process each faction's startup phase
+	for faction in factions:
+		_process_faction_phase(faction)
+
+	# Clean up dead units/buildings
+	_cleanup_factions()
+
+func _process_faction_phase(faction: Faction) -> void:
+	if not faction_phase.has(faction):
+		return
+	var phase: String = faction_phase[faction]
+
+	match phase:
+		"gather":
+			_process_gather_phase(faction)
+		"build":
+			_process_build_phase(faction)
+		# "done" means normal AI takes over — no special processing needed
+
+func _process_gather_phase(faction: Faction) -> void:
+	# Check if enough wood has been gathered
+	if faction.get_resource(GameData.ResourceType.WOOD) >= GameData.INITIAL_WOOD_GATHER:
+		faction_phase[faction] = "build"
+		# Switch all units to idle so the build phase can assign them
+		for unit in faction.units:
+			if unit != null and is_instance_valid(unit):
+				unit.target_resource = null
+				unit.is_working = false
+				unit._set_role(GameData.UnitRole.IDLE)
+		return
+
+	# Make sure all units are gathering wood
+	for unit in faction.units:
+		if unit == null or not is_instance_valid(unit):
+			continue
+		if unit.role != GameData.UnitRole.GATHERER:
+			unit._set_role(GameData.UnitRole.GATHERER)
+
+func _process_build_phase(faction: Faction) -> void:
+	# Check if town centre already placed
+	if faction.has_construction_sites() or faction.get_completed_buildings_of_type(GameData.BuildingType.TOWN_CENTRE).size() > 0:
+		# Either still building or already built
+		if faction.get_completed_buildings_of_type(GameData.BuildingType.TOWN_CENTRE).size() > 0:
+			# Done! Seed territory and hand off to normal AI
+			if faction.territory_tiles.size() <= 1:
+				_seed_initial_territory(faction)
+			faction_phase[faction] = "done"
+		return
+
+	# Place town centre at territory center
+	var tc_tile := faction.territory_center
+	# Find a valid 2x2 spot near the territory center
+	var build_tile := _find_tc_spot(tc_tile)
+	if build_tile == Vector2i(-1, -1):
+		return  # No valid spot yet — wait
+
+	var tc := Building.create(
+		GameData.BuildingType.TOWN_CENTRE,
+		faction,
+		build_tile,
+		World.TILE_SIZE
+	)
+	world.add_child(tc)
+	faction.buildings.append(tc)
+	world.register_building_tiles(tc)
+
+	# Assign builder units
+	for unit in faction.units:
+		if unit != null and is_instance_valid(unit):
+			unit.target_building = tc
+			unit._set_role(GameData.UnitRole.BUILDER)
+
+func _find_tc_spot(center: Vector2i) -> Vector2i:
+	# Spiral search for a 2x2 buildable area
+	for radius in range(0, 15):
+		for dx in range(-radius, radius + 1):
+			for dy in range(-radius, radius + 1):
+				if abs(dx) != radius and abs(dy) != radius:
+					continue
+				var tile := Vector2i(center.x + dx, center.y + dy)
+				if _is_valid_tc_spot(tile):
+					return tile
+	return Vector2i(-1, -1)
+
+func _is_valid_tc_spot(tile: Vector2i) -> bool:
+	for dx in range(2):
+		for dy in range(2):
+			var check := Vector2i(tile.x + dx, tile.y + dy)
+			if not world.is_valid_coords(check):
+				return false
+			if world.grid[check.x][check.y] != World.TerrainType.PLAIN:
+				return false
+			if world.is_tile_occupied(check):
+				return false
+	return true
+
+# ─── Territory Seeding ───────────────────────────────────────────────
+
+func _seed_initial_territory(faction: Faction) -> void:
+	var radius: int = GameData.INITIAL_TERRITORY_RADIUS
+	var queue: Array = [faction.territory_center]
+	var visited: Dictionary = {}
+	visited[faction.territory_center] = true
+	faction.territory_tiles[faction.territory_center] = true
+	var dirs := [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]
+	while queue.size() > 0:
+		var current: Vector2i = queue.pop_front()
+		for d in dirs:
+			var neighbor: Vector2i = current + d
+			if visited.has(neighbor):
+				continue
+			visited[neighbor] = true
+			if not world.is_valid_coords(neighbor):
+				continue
+			if not world.is_land_tile(neighbor):
+				continue
+			if neighbor.distance_to(faction.territory_center) > radius:
+				continue
+			faction.territory_tiles[neighbor] = true
+			queue.append(neighbor)
+
+# ─── Cleanup ─────────────────────────────────────────────────────────
+
+func _cleanup_factions() -> void:
+	for faction in factions:
+		faction.units = faction.units.filter(func(u): return u != null and is_instance_valid(u))
+		faction.buildings = faction.buildings.filter(func(b): return b != null and is_instance_valid(b))
+
+# ─── Helpers ─────────────────────────────────────────────────────────
 
 func _find_nearest_plain(center: Vector2i) -> Vector2i:
-	# Spiral search outward to find a PLAIN tile near the desired center
 	if _is_plain(center):
 		return center
 	for radius in range(1, 30):
 		for dx in range(-radius, radius + 1):
 			for dy in range(-radius, radius + 1):
 				if abs(dx) != radius and abs(dy) != radius:
-					continue  # Only check perimeter
+					continue
 				var test := Vector2i(center.x + dx, center.y + dy)
 				if _is_plain(test):
 					return test
-	return center  # Fallback
+	return center
 
 func _is_plain(tile: Vector2i) -> bool:
 	if not world.is_valid_coords(tile):
 		return false
 	return world.grid[tile.x][tile.y] == World.TerrainType.PLAIN
 
-func _spawn_town_centre(faction: Faction) -> void:
-	var tc := Building.create(
-		GameData.BuildingType.TOWN_CENTRE,
-		faction,
-		faction.territory_center,
-		World.TILE_SIZE
-	)
-	# Town Centre starts fully constructed
-	tc.is_constructed = true
-	tc.current_hp = tc.max_hp
-	world.add_child(tc)
-	faction.buildings.append(tc)
-	# Mark occupied tiles (so nothing else builds there)
-	world.register_building_tiles(tc)
-
-func _spawn_initial_units(faction: Faction) -> void:
-	var center_world := world.tile_to_world(faction.territory_center)
-	for i in range(GameData.INITIAL_UNIT_COUNT):
-		# Spread units around the town centre
-		var offset := Vector2(
-			randf_range(-32, 32),
-			randf_range(-32, 32)
-		)
-		var spawn_pos := center_world + Vector2(World.TILE_SIZE, World.TILE_SIZE) + offset
-		var unit := Unit.create(faction, spawn_pos, world)
-		world.add_child(unit)
-		faction.units.append(unit)
-
-# ─── Game Loop ───────────────────────────────────────────────────────
-
-func _process(delta: float) -> void:
-	if not game_started or game_over:
-		return
-
-	# War check timer
-	war_check_timer += delta
-	if war_check_timer >= GameData.AI_WAR_CHECK_INTERVAL:
-		war_check_timer = 0.0
-		_evaluate_wars()
-
-	# Check for defeated factions
-	_check_defeated_factions()
-
-	# Resolve ongoing combat
-	_resolve_combat()
-
-# ─── War Evaluation ──────────────────────────────────────────────────
-
-func _evaluate_wars() -> void:
-	for faction in factions:
-		if faction.is_player or faction.units.size() == 0:
-			continue
-
-		# Find weakest other faction
-		var weakest: Faction = null
-		var weakest_strength: float = INF
-
-		for other in factions:
-			if other == faction or other.units.size() == 0:
-				continue
-			var strength: float = other.get_army_strength() + other.development_level * 10.0 + other.get_territory_area() * 0.1
-			if strength < weakest_strength:
-				weakest_strength = strength
-				weakest = other
-
-		if weakest == null:
-			continue
-
-		# Check if strong enough to attack
-		var own_strength: float = faction.get_army_strength()
-		if own_strength > weakest_strength * GameData.AI_ATTACK_THRESHOLD:
-			_initiate_attack(faction, weakest)
-
-func _initiate_attack(attacker: Faction, defender: Faction) -> void:
-	# Convert idle units to warriors and send toward enemy
-	var target_pos := world.tile_to_world(defender.territory_center)
-	for unit in attacker.units:
-		if unit == null or not is_instance_valid(unit):
-			continue
-		if unit.role == GameData.UnitRole.IDLE or unit.role == GameData.UnitRole.SCOUT:
-			unit.role = GameData.UnitRole.WARRIOR
-			unit.target_position = target_pos + Vector2(randf_range(-24, 24), randf_range(-24, 24))
-			unit.is_working = false
-			unit.queue_redraw()
-
-# ─── Combat Resolution ───────────────────────────────────────────────
-
-func _resolve_combat() -> void:
-	# Check for warrior units from different factions near each other
-	var combat_range: float = GameData.COMBAT_RANGE_TILES * World.TILE_SIZE
-
-	# Group warriors by faction
-	var warriors_by_faction: Dictionary = {}
-	for faction in factions:
-		var faction_warriors: Array = []
-		for unit in faction.units:
-			if unit == null or not is_instance_valid(unit):
-				continue
-			if unit.role == GameData.UnitRole.WARRIOR:
-				faction_warriors.append(unit)
-		if faction_warriors.size() > 0:
-			warriors_by_faction[faction] = faction_warriors
-
-	# Check each pair of factions for proximity combat
-	var faction_list: Array = warriors_by_faction.keys()
-	for i in range(faction_list.size()):
-		for j in range(i + 1, faction_list.size()):
-			var f1: Faction = faction_list[i]
-			var f2: Faction = faction_list[j]
-			var w1: Array = warriors_by_faction[f1]
-			var w2: Array = warriors_by_faction[f2]
-
-			# Check if any warriors are in range
-			var in_combat: bool = false
-			for u1 in w1:
-				for u2 in w2:
-					if u1.global_position.distance_to(u2.global_position) < combat_range:
-						in_combat = true
-						break
-				if in_combat:
-					break
-
-			if in_combat:
-				_resolve_battle(f1, w1, f2, w2)
-
-func _resolve_battle(f1: Faction, w1: Array, f2: Faction, w2: Array) -> void:
-	var strength1: float = _calculate_group_strength(w1)
-	var strength2: float = _calculate_group_strength(w2)
-
-	var winner: Faction
-	var loser: Faction
-	var winner_warriors: Array
-	var loser_warriors: Array
-
-	if strength1 >= strength2:
-		winner = f1
-		loser = f2
-		winner_warriors = w1
-		loser_warriors = w2
-	else:
-		winner = f2
-		loser = f1
-		winner_warriors = w2
-		loser_warriors = w1
-
-	# Loser loses units proportional to strength ratio
-	var strength_ratio: float = min(_calculate_group_strength(winner_warriors) / max(_calculate_group_strength(loser_warriors), 0.1), 5.0)
-	var loser_casualties: int = ceili(loser_warriors.size() * min(strength_ratio * 0.3, 1.0))
-	var winner_casualties: int = ceili(winner_warriors.size() * randf_range(GameData.COMBAT_ATTRITION_MIN, GameData.COMBAT_ATTRITION_MAX))
-
-	# Kill loser units
-	loser_casualties = mini(loser_casualties, loser_warriors.size())
-	for k in range(loser_casualties):
-		var unit: Unit = loser_warriors[k]
-		_kill_unit(loser, unit)
-
-	# Kill winner attrition
-	winner_casualties = mini(winner_casualties, winner_warriors.size())
-	for k in range(winner_casualties):
-		var unit: Unit = winner_warriors[k]
-		_kill_unit(winner, unit)
-
-	# After battle, surviving winner warriors return to idle
-	for unit in winner_warriors:
-		if is_instance_valid(unit):
-			unit.role = GameData.UnitRole.IDLE
-			unit.queue_redraw()
-
-	var result_text: String = "%s defeated %s! (%d vs %d casualties)" % [winner.faction_name, loser.faction_name, winner_casualties, loser_casualties]
-	combat_occurred.emit(winner, loser, result_text)
-
-func _calculate_group_strength(warriors: Array) -> float:
-	var strength: float = 0.0
-	for unit in warriors:
-		if unit == null or not is_instance_valid(unit):
-			continue
-		var base: float = 1.0
-		if unit.has_weapon:
-			base *= GameData.WEAPON_BONUS
-		strength += base
-	return strength
-
-func _kill_unit(faction: Faction, unit: Unit) -> void:
+## Kill a unit and remove it from its faction.
+func kill_unit(faction: Faction, unit: Unit) -> void:
 	if unit == null or not is_instance_valid(unit):
 		return
-	faction.remove_unit(unit)
+	if faction != null:
+		faction.remove_unit(unit)
 	unit.queue_free()
-
-# ─── Defeated Factions ───────────────────────────────────────────────
-
-func _check_defeated_factions() -> void:
-	for faction in factions:
-		# Clean up freed unit references
-		faction.units = faction.units.filter(func(u): return u != null and is_instance_valid(u))
-		faction.buildings = faction.buildings.filter(func(b): return b != null and is_instance_valid(b))
-
-		if faction.units.size() == 0 and faction.buildings.size() == 0:
-			faction_defeated.emit(faction)
-
-	# Check win condition
-	var alive_factions: Array = factions.filter(func(f): return f.units.size() > 0 or f.buildings.size() > 0)
-	if alive_factions.size() <= 1 and alive_factions.size() > 0:
-		game_over = true
-		game_over_signal.emit(alive_factions[0])

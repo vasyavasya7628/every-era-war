@@ -2,6 +2,7 @@ extends Node
 
 # ─── Resource Types ──────────────────────────────────────────────────
 enum ResourceType {
+	NONE = -1,
 	WOOD,
 	GOLD,
 	ORE,
@@ -69,9 +70,15 @@ const UNIT_MOVE_SPEED: float = 30.0     # Pixels per second
 const UNIT_SIZE: int = 4                # Pixel size of a unit sprite (4×4)
 
 # ─── Faction Constants ──────────────────────────────────────────────
-const INITIAL_TERRITORY_RADIUS: int = 5 # Tiles from centre
-const TERRITORY_EXPAND_PER_BUILDING: int = 2
-const INITIAL_UNIT_COUNT: int = 5
+const INITIAL_TERRITORY_RADIUS: int = 5 # Tiles from centre (used for initial seed after Town Centre is built)
+const TERRITORY_BASE_EXPANSION: int = 3  # Tiles added per expansion tick (base, always)
+const TERRITORY_EXPAND_PER_BUILDING: int = 2  # Extra tiles per completed house/building
+const TERRITORY_EXPAND_INTERVAL: float = 15.0  # Seconds between auto-expansion ticks
+const INITIAL_UNIT_COUNT: int = 0  # Units are spawned manually by the player
+
+# ─── Spawn / Pairing ─────────────────────────────────────────────────
+const PAIR_DISTANCE: float = 96.0    # Pixel radius within which two spawned humans auto-form a faction
+const INITIAL_WOOD_GATHER: int = 10  # Wood that must be gathered before a Town Centre is placed
 
 # ─── AI Constants ────────────────────────────────────────────────────
 const AI_SPAWN_INTERVAL: float = 10.0   # Seconds between AI auto-spawns

@@ -2,11 +2,15 @@ class_name Faction
 extends Node2D
 
 ## Manages all per-faction state: population, resources, buildings, territory.
+## A faction is formed dynamically when the player spawns humans close together.
 
 var faction_id: int = 0
 var faction_name: String = "Unnamed"
 var faction_color: Color = Color.WHITE
-var is_player: bool = false
+var is_player: bool = true
+
+## The leader unit — the first human that was spawned for this faction.
+var leader: Unit = null
 
 # Economy
 var resources: Dictionary = {}
@@ -15,9 +19,9 @@ var resources: Dictionary = {}
 var units: Array = []       # Unit node references
 var buildings: Array = []   # Building node references
 
-# Territory
+# Territory — keys are Vector2i tile coords, values are true
+var territory_tiles: Dictionary = {}
 var territory_center: Vector2i = Vector2i.ZERO
-var territory_radius: int = GameData.INITIAL_TERRITORY_RADIUS
 
 # Development = number of completed buildings
 var development_level: int:
@@ -32,8 +36,9 @@ func _init() -> void:
 	_reset_resources()
 
 func _reset_resources() -> void:
+	# Start with no resources — units must gather them
 	resources = {
-		GameData.ResourceType.WOOD: 50,
+		GameData.ResourceType.WOOD: 0,
 		GameData.ResourceType.GOLD: 0,
 		GameData.ResourceType.ORE: 0,
 		GameData.ResourceType.STONE: 0,
@@ -79,14 +84,50 @@ func get_army_strength() -> float:
 # ─── Territory ──────────────────────────────────────────────────────
 
 func get_territory_area() -> int:
-	return int(PI * territory_radius * territory_radius)
-
-func expand_territory() -> void:
-	territory_radius += GameData.TERRITORY_EXPAND_PER_BUILDING
+	return territory_tiles.size()
 
 func is_in_territory(tile: Vector2i) -> bool:
-	var diff := Vector2(tile.x - territory_center.x, tile.y - territory_center.y)
-	return diff.length() <= territory_radius
+	return territory_tiles.has(tile)
+
+## BFS frontier expansion — organic tile-by-tile spread over land.
+func expand_territory() -> void:
+	var world_node := get_parent() as World
+	if world_node == null:
+		return
+
+	# How many tiles to claim this tick
+	var tiles_to_add: int = GameData.TERRITORY_BASE_EXPANSION + development_level * GameData.TERRITORY_EXPAND_PER_BUILDING
+
+	# Build frontier: unclaimed land tiles adjacent to our territory
+	var frontier: Array = []
+	var seen: Dictionary = {}
+	for tile in territory_tiles:
+		var tile_v := tile as Vector2i
+		var neighbors := [
+			Vector2i(tile_v.x + 1, tile_v.y),
+			Vector2i(tile_v.x - 1, tile_v.y),
+			Vector2i(tile_v.x, tile_v.y + 1),
+			Vector2i(tile_v.x, tile_v.y - 1),
+		]
+		for n in neighbors:
+			if seen.has(n):
+				continue
+			seen[n] = true
+			if territory_tiles.has(n):
+				continue
+			if not world_node.is_land_tile(n):
+				continue
+			frontier.append(n)
+
+	# Shuffle for organic spread
+	frontier.shuffle()
+
+	var added := 0
+	for t in frontier:
+		if added >= tiles_to_add:
+			break
+		territory_tiles[t] = true
+		added += 1
 
 # ─── Unit Queries ───────────────────────────────────────────────────
 
@@ -136,12 +177,14 @@ func remove_building(building) -> void:
 
 # ─── Factory ────────────────────────────────────────────────────────
 
-static func create(id: int, fname: String, color: Color, center: Vector2i, player: bool = false) -> Faction:
+static func create(id: int, fname: String, color: Color, center: Vector2i, player: bool = true) -> Faction:
 	var faction := Faction.new()
 	faction.faction_id = id
 	faction.faction_name = fname
 	faction.faction_color = color
 	faction.territory_center = center
+	if not faction.territory_tiles.has(center):
+		faction.territory_tiles[center] = true
 	faction.is_player = player
 	faction.name = "Faction_" + fname
 	return faction

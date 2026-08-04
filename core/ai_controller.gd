@@ -21,8 +21,8 @@ const BUILD_PRIORITY: Array = [
 
 func _ready() -> void:
 	# Stagger AI thinking to avoid all factions thinking on the same frame
-	think_timer = randf_range(0.0, 2.0)
-	build_timer = randf_range(3.0, 8.0)
+	think_timer = randf_range(0.0, 5.0)
+	build_timer = randf_range(3.0, 10.0)
 
 func initialize(f: Faction, w: World) -> void:
 	faction = f
@@ -100,18 +100,14 @@ func _try_build() -> void:
 			return  # Only build one at a time
 
 func _find_build_spot(bsize: Vector2i) -> Vector2i:
-	# Try random positions within territory
-	var center := faction.territory_center
-	var radius := faction.territory_radius
-
+	# Pick random tiles from territory_tiles dict and test each for validity
+	var tiles: Array = faction.territory_tiles.keys()
+	if tiles.is_empty():
+		return Vector2i(-1, -1)
 	for _attempt in range(30):
-		var dx := randi_range(-radius, radius)
-		var dy := randi_range(-radius, radius)
-		var tile := Vector2i(center.x + dx, center.y + dy)
-
+		var tile: Vector2i = tiles[randi() % tiles.size()]
 		if _is_valid_build_spot(tile, bsize):
 			return tile
-
 	return Vector2i(-1, -1)  # No valid spot found
 
 func _is_valid_build_spot(tile: Vector2i, bsize: Vector2i) -> bool:
@@ -149,12 +145,13 @@ func _manage_warriors() -> void:
 				break
 			if unit.role == GameData.UnitRole.IDLE or unit.role == GameData.UnitRole.SCOUT:
 				unit.role = GameData.UnitRole.WARRIOR
-				# Set patrol position near territory edge
-				var edge_offset := Vector2(
-					randf_range(-1, 1) * faction.territory_radius * World.TILE_SIZE,
-					randf_range(-1, 1) * faction.territory_radius * World.TILE_SIZE
-				)
-				unit.target_position = world.tile_to_world(faction.territory_center) + edge_offset
+				# Set patrol position at a random territory tile
+				var tiles: Array = faction.territory_tiles.keys()
+				if tiles.size() > 0:
+					var patrol_tile: Vector2i = tiles[randi() % tiles.size()]
+					unit.target_position = world.tile_to_world(patrol_tile)
+				else:
+					unit.target_position = world.tile_to_world(faction.territory_center)
 				unit.queue_redraw()
 				to_convert -= 1
 	elif current_warriors > desired_warriors + 2:

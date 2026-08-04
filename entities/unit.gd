@@ -159,9 +159,9 @@ func _process_scout(delta: float) -> void:
 
 	wander_timer -= delta
 	if wander_timer <= 0.0:
-		# Pick random wander target within territory + 10 tiles
+		# Pick random wander target within territory (range ≈ sqrt of tile count + buffer)
 		var center := world_ref.tile_to_world(faction.territory_center)
-		var range_px: float = (faction.territory_radius + 10) * World.TILE_SIZE
+		var range_px: float = (sqrt(float(faction.territory_tiles.size())) + 10.0) * World.TILE_SIZE
 		target_position = center + Vector2(
 			randf_range(-range_px, range_px),
 			randf_range(-range_px, range_px)
