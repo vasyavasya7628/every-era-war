@@ -1,3 +1,3 @@
 ﻿# every-era-war
-<img width="1157" height="728" alt="image" src="https://github.com/user-attachments/assets/450a9832-5155-45c5-9cf0-6859cf4a75ea" />
-<img width="1150" height="691" alt="image" src="https://github.com/user-attachments/assets/17ba6fdb-655a-4255-b980-828d34c0b86c" />
+<img width="2272" height="1288" alt="image" src="https://github.com/user-attachments/assets/5cd6de8a-328f-4639-86ef-c64160466feb" />
+
