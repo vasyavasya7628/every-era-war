@@ -21,6 +21,9 @@ func _process(delta: float) -> void:
 	if not is_constructed:
 		return
 
+	if building_type == GameData.BuildingType.TOWN_CENTRE and Engine.get_process_frames() % 15 == 0:
+		queue_redraw()
+
 	# Forge produces weapons over time
 	if building_type == GameData.BuildingType.FORGE and faction != null:
 		weapon_timer += delta
@@ -68,6 +71,9 @@ func _draw() -> void:
 	var h: float = bld_size.y * ts
 	var col: Color = faction.faction_color
 
+	# Simple Drop Shadow
+	draw_rect(Rect2(3, 3, w, h), Color(0, 0, 0, 0.35))
+
 	if not is_constructed:
 		# ── Under Construction ──
 		# Semi-transparent fill
@@ -108,6 +114,17 @@ func _draw() -> void:
 				draw_rect(Rect2(w - 4, 1, 3, 3), col.lightened(0.4))
 				draw_rect(Rect2(1, h - 4, 3, 3), col.lightened(0.4))
 				draw_rect(Rect2(w - 4, h - 4, 3, 3), col.lightened(0.4))
+
+				# Display stored resource counts above Town Centre
+				if faction != null and is_constructed:
+					var text := "W:%d G:%d O:%d S:%d" % [
+						faction.get_resource(GameData.ResourceType.WOOD),
+						faction.get_resource(GameData.ResourceType.GOLD),
+						faction.get_resource(GameData.ResourceType.ORE),
+						faction.get_resource(GameData.ResourceType.STONE)
+					]
+					var font := ThemeDB.fallback_font
+					draw_string(font, Vector2(-8, -4), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color.YELLOW)
 
 			GameData.BuildingType.HOUSE:
 				# Roof triangle on top

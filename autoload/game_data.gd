@@ -77,7 +77,7 @@ const TERRITORY_EXPAND_INTERVAL: float = 15.0  # Seconds between auto-expansion 
 const INITIAL_UNIT_COUNT: int = 0  # Units are spawned manually by the player
 
 # ─── Spawn / Pairing ─────────────────────────────────────────────────
-const PAIR_DISTANCE: float = 96.0    # Pixel radius within which two spawned humans auto-form a faction
+const PAIR_DISTANCE: float = 80.0    # 5 tiles (5 * 16px) within which two spawned humans auto-form a faction
 const INITIAL_WOOD_GATHER: int = 10  # Wood that must be gathered before a Town Centre is placed
 
 # ─── AI Constants ────────────────────────────────────────────────────

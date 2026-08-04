@@ -89,6 +89,20 @@ func get_territory_area() -> int:
 func is_in_territory(tile: Vector2i) -> bool:
 	return territory_tiles.has(tile)
 
+## Returns minimum distance in tiles from `tile` to any tile in our territory.
+func get_min_tile_distance(tile: Vector2i) -> float:
+	if territory_tiles.is_empty():
+		return tile.distance_to(territory_center)
+	if territory_tiles.has(tile):
+		return 0.0
+	var min_dist: float = INF
+	var tile_vec := Vector2(tile)
+	for t in territory_tiles:
+		var d := tile_vec.distance_to(Vector2(t as Vector2i))
+		if d < min_dist:
+			min_dist = d
+	return min_dist
+
 ## BFS frontier expansion — organic tile-by-tile spread over land.
 func expand_territory() -> void:
 	var world_node := get_parent() as World
@@ -97,6 +111,8 @@ func expand_territory() -> void:
 
 	# How many tiles to claim this tick
 	var tiles_to_add: int = GameData.TERRITORY_BASE_EXPANSION + development_level * GameData.TERRITORY_EXPAND_PER_BUILDING
+
+	var gm = world_node.get_node_or_null("GameManager")
 
 	# Build frontier: unclaimed land tiles adjacent to our territory
 	var frontier: Array = []
@@ -116,6 +132,8 @@ func expand_territory() -> void:
 			if territory_tiles.has(n):
 				continue
 			if not world_node.is_land_tile(n):
+				continue
+			if gm != null and gm.has_method("is_tile_claimed") and gm.is_tile_claimed(n, self):
 				continue
 			frontier.append(n)
 

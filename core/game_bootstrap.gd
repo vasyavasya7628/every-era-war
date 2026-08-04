@@ -32,15 +32,6 @@ func initialize(world: World) -> void:
 	building_placer.player_faction = game_manager.player_faction
 	world.add_child(building_placer)
 
-	# ── AI Controllers (for non-player factions) ──
-	for faction in game_manager.factions:
-		if not faction.is_player:
-			var ai := AIController.new()
-			ai.name = "AI_" + faction.faction_name
-			ai.initialize(faction, world)
-			world.add_child(ai)
-			ai_controllers.append(ai)
-
 	# ── Territory Overlay ──
 	var overlay := TerritoryOverlay.new()
 	overlay.name = "TerritoryOverlay"
@@ -59,7 +50,12 @@ func initialize(world: World) -> void:
 		game_manager
 	)
 
-	print("[GameBootstrap] RTS systems initialized: %d factions, %d AI controllers" % [
-		game_manager.factions.size(),
-		ai_controllers.size()
-	])
+	# ── Listen for dynamic faction creation ──
+	game_manager.faction_formed.connect(func(f: Faction):
+		if unit_spawner.player_faction == null:
+			unit_spawner.player_faction = f
+		if building_placer.player_faction == null:
+			building_placer.player_faction = f
+	)
+
+	print("[GameBootstrap] RTS systems initialized dynamically")

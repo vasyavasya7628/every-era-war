@@ -10,6 +10,7 @@ var territory_expand_timer: float = 0.0
 
 # ─── Game State ──────────────────────────────────────────────────────
 var game_started: bool = false
+var player_faction: Faction = null
 
 # ─── Pending Units (spawned but not yet in a faction) ────────────────
 ## Units that have been spawned but are waiting for a partner to form a faction.
@@ -24,6 +25,8 @@ var faction_phase: Dictionary = {}   # Faction -> String
 var _next_faction_id: int = 0
 
 signal faction_formed(faction: Faction)
+signal combat_occurred(attacker: Faction, defender: Faction, result: String)
+signal game_over_signal(winner: Faction)
 
 func initialize(world_ref: World) -> void:
 	world = world_ref
@@ -32,12 +35,29 @@ func initialize(world_ref: World) -> void:
 # ─── Unit Registration (called from UnitSpawner) ─────────────────────
 
 ## Called each time the player spawns a new human.
-## Checks if the new unit is close enough to an existing pending unit to form a faction.
+## Checks if spawned within < 9 tiles of territory, or paired by proximity (<= 5 tiles).
 func register_unit(unit: Unit) -> void:
 	# Clean up freed references first
 	pending_units = pending_units.filter(func(u): return u != null and is_instance_valid(u))
 
-	# Check against existing pending units for proximity pairing
+	var spawn_tile := world.world_to_tile(unit.global_position)
+
+	# 1. Check if spawned within < 9 tiles of any territory
+	var candidate_factions: Array = []
+	for f in factions:
+		if f != null and is_instance_valid(f):
+			if f.get_min_tile_distance(spawn_tile) < 9.0:
+				candidate_factions.append(f)
+
+	if candidate_factions.size() > 0:
+		# Choose one candidate territory at random
+		var chosen: Faction = candidate_factions[randi() % candidate_factions.size()]
+		unit.faction = chosen
+		chosen.units.append(unit)
+		unit.queue_redraw()
+		return
+
+	# 2. Check against existing pending units for proximity pairing (<= 5 tiles)
 	for existing in pending_units:
 		if unit.global_position.distance_to(existing.global_position) <= GameData.PAIR_DISTANCE:
 			# Form a faction between existing (leader) and new unit (follower)
@@ -45,8 +65,7 @@ func register_unit(unit: Unit) -> void:
 			pending_units.erase(existing)
 			return
 
-	# No nearby partner — add to pending list; this unit will form a lone faction
-	# Give solo humans their own solo faction immediately so they can act
+	# 3. If no pending partner within 5 tiles and not near territory, form a solo faction
 	_form_solo_faction(unit)
 
 ## Creates a faction for a lone unit (no partner nearby).
@@ -59,6 +78,8 @@ func _form_solo_faction(unit: Unit) -> void:
 	_next_faction_id += 1
 	world.add_child(faction)
 	factions.append(faction)
+	if player_faction == null:
+		player_faction = faction
 
 	# Assign unit to faction
 	unit.faction = faction
@@ -83,6 +104,8 @@ func _form_faction(leader_unit: Unit, follower_unit: Unit) -> void:
 	_next_faction_id += 1
 	world.add_child(faction)
 	factions.append(faction)
+	if player_faction == null:
+		player_faction = faction
 
 	# Assign units — first spawned is leader
 	faction.leader = leader_unit
@@ -211,6 +234,13 @@ func _is_valid_tc_spot(tile: Vector2i) -> bool:
 				return false
 	return true
 
+func is_tile_claimed(tile: Vector2i, exclude_faction: Faction = null) -> bool:
+	for f in factions:
+		if f != null and is_instance_valid(f) and f != exclude_faction:
+			if f.is_in_territory(tile):
+				return true
+	return false
+
 # ─── Territory Seeding ───────────────────────────────────────────────
 
 func _seed_initial_territory(faction: Faction) -> void:
@@ -230,6 +260,8 @@ func _seed_initial_territory(faction: Faction) -> void:
 			if not world.is_valid_coords(neighbor):
 				continue
 			if not world.is_land_tile(neighbor):
+				continue
+			if is_tile_claimed(neighbor, faction):
 				continue
 			if neighbor.distance_to(faction.territory_center) > radius:
 				continue
@@ -263,10 +295,11 @@ func _is_plain(tile: Vector2i) -> bool:
 		return false
 	return world.grid[tile.x][tile.y] == World.TerrainType.PLAIN
 
-## Kill a unit and remove it from its faction.
+## Kill a unit and remove it from its faction and pending list.
 func kill_unit(faction: Faction, unit: Unit) -> void:
 	if unit == null or not is_instance_valid(unit):
 		return
+	pending_units.erase(unit)
 	if faction != null:
 		faction.remove_unit(unit)
 	unit.queue_free()

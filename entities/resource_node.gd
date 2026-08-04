@@ -26,6 +26,9 @@ func _draw() -> void:
 	var half := World.TILE_SIZE / 2.0
 	var col: Color = GameData.RESOURCE_COLORS.get(resource_type, Color.WHITE)
 
+	# Simple Drop Shadow
+	draw_ellipse(Vector2(half + 1, half + 3), 4.5, 2.0, Color(0, 0, 0, 0.35))
+
 	match resource_type:
 		GameData.ResourceType.WOOD:
 			# Tiny tree: brown trunk + green triangle canopy

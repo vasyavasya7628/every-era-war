@@ -1,24 +1,11 @@
 class_name GameHUD
 extends CanvasLayer
 
-## In-game HUD showing resources, spawn controls, build menu, and faction info.
+## In-game HUD showing spawn controls and action buttons.
 
-var player_faction: Faction = null
 var unit_spawner: UnitSpawner = null
 var building_placer: BuildingPlacer = null
 var game_manager: GameManager = null
-
-# UI References (created in _ready)
-var resource_panel: PanelContainer
-var lbl_wood: Label
-var lbl_gold: Label
-var lbl_ore: Label
-var lbl_stone: Label
-
-var faction_panel: PanelContainer
-var lbl_population: Label
-var lbl_development: Label
-var lbl_territory: Label
 
 var action_panel: PanelContainer
 var btn_spawn: Button
@@ -30,12 +17,14 @@ var info_label: Label
 var combat_log_label: Label
 var combat_log_timer: float = 0.0
 
+var lbl_stats: Label
+var total_game_time: float = 0.0
+
 func _ready() -> void:
 	layer = 1
 	_build_ui()
 
-func initialize(faction: Faction, spawner: UnitSpawner, placer: BuildingPlacer, gm: GameManager) -> void:
-	player_faction = faction
+func initialize(_faction: Faction, spawner: UnitSpawner, placer: BuildingPlacer, gm: GameManager) -> void:
 	unit_spawner = spawner
 	building_placer = placer
 	game_manager = gm
@@ -46,10 +35,8 @@ func initialize(faction: Faction, spawner: UnitSpawner, placer: BuildingPlacer, 
 		game_manager.game_over_signal.connect(_on_game_over)
 
 func _process(delta: float) -> void:
-	if player_faction == null:
-		return
-	_update_resources()
-	_update_faction_info()
+	total_game_time += delta
+	_update_stats()
 	_update_action_buttons()
 
 	# Fade combat log
@@ -58,78 +45,42 @@ func _process(delta: float) -> void:
 		if combat_log_timer <= 0 and combat_log_label:
 			combat_log_label.text = ""
 
+func _update_stats() -> void:
+	if lbl_stats:
+		# 1 year = 20 seconds real-time
+		var current_year: int = int(total_game_time / 20.0) + 1
+		var fps: int = Engine.get_frames_per_second()
+		lbl_stats.text = "Year %d  |  FPS: %d" % [current_year, fps]
+
 # ─── UI Construction ─────────────────────────────────────────────────
 
 func _build_ui() -> void:
-	# ── Resource Bar (top-right) ──
-	var res_margin := MarginContainer.new()
-	res_margin.anchors_preset = Control.PRESET_TOP_RIGHT
-	res_margin.anchor_left = 1.0
-	res_margin.anchor_right = 1.0
-	res_margin.offset_left = -320
-	res_margin.offset_bottom = 60
-	res_margin.add_theme_constant_override("margin_left", 8)
-	res_margin.add_theme_constant_override("margin_top", 8)
-	res_margin.add_theme_constant_override("margin_right", 8)
-	res_margin.add_theme_constant_override("margin_bottom", 8)
-	add_child(res_margin)
+	# ── Stats Bar (Year & FPS top-right) ──
+	var stats_margin := MarginContainer.new()
+	stats_margin.anchors_preset = Control.PRESET_TOP_RIGHT
+	stats_margin.anchor_left = 1.0
+	stats_margin.anchor_right = 1.0
+	stats_margin.offset_left = -220
+	stats_margin.offset_bottom = 50
+	stats_margin.add_theme_constant_override("margin_left", 8)
+	stats_margin.add_theme_constant_override("margin_top", 8)
+	stats_margin.add_theme_constant_override("margin_right", 8)
+	stats_margin.add_theme_constant_override("margin_bottom", 8)
+	add_child(stats_margin)
 
-	resource_panel = PanelContainer.new()
-	res_margin.add_child(resource_panel)
+	var stats_panel := PanelContainer.new()
+	stats_margin.add_child(stats_panel)
 
-	var res_inner_margin := MarginContainer.new()
-	res_inner_margin.add_theme_constant_override("margin_left", 8)
-	res_inner_margin.add_theme_constant_override("margin_top", 4)
-	res_inner_margin.add_theme_constant_override("margin_right", 8)
-	res_inner_margin.add_theme_constant_override("margin_bottom", 4)
-	resource_panel.add_child(res_inner_margin)
+	var stats_inner := MarginContainer.new()
+	stats_inner.add_theme_constant_override("margin_left", 8)
+	stats_inner.add_theme_constant_override("margin_top", 4)
+	stats_inner.add_theme_constant_override("margin_right", 8)
+	stats_inner.add_theme_constant_override("margin_bottom", 4)
+	stats_panel.add_child(stats_inner)
 
-	var res_inner_hbox := HBoxContainer.new()
-	res_inner_hbox.add_theme_constant_override("separation", 14)
-	res_inner_margin.add_child(res_inner_hbox)
-
-	lbl_wood = _make_resource_label("Wood: 0", res_inner_hbox)
-	lbl_gold = _make_resource_label("Gold: 0", res_inner_hbox)
-	lbl_ore = _make_resource_label("Ore: 0", res_inner_hbox)
-	lbl_stone = _make_resource_label("Stone: 0", res_inner_hbox)
-
-	# ── Faction Info (top-left, below god tools) ──
-	var faction_margin := MarginContainer.new()
-	faction_margin.anchors_preset = Control.PRESET_TOP_LEFT
-	faction_margin.offset_top = 90
-	faction_margin.offset_right = 280
-	faction_margin.offset_bottom = 180
-	faction_margin.add_theme_constant_override("margin_left", 16)
-	faction_margin.add_theme_constant_override("margin_top", 8)
-	faction_margin.add_theme_constant_override("margin_right", 8)
-	faction_margin.add_theme_constant_override("margin_bottom", 8)
-	add_child(faction_margin)
-
-	faction_panel = PanelContainer.new()
-	faction_margin.add_child(faction_panel)
-
-	var faction_inner := MarginContainer.new()
-	faction_inner.add_theme_constant_override("margin_left", 8)
-	faction_inner.add_theme_constant_override("margin_top", 6)
-	faction_inner.add_theme_constant_override("margin_right", 8)
-	faction_inner.add_theme_constant_override("margin_bottom", 6)
-	faction_panel.add_child(faction_inner)
-
-	var faction_vbox := VBoxContainer.new()
-	faction_vbox.add_theme_constant_override("separation", 4)
-	faction_inner.add_child(faction_vbox)
-
-	lbl_population = Label.new()
-	lbl_population.text = "Population: 0"
-	faction_vbox.add_child(lbl_population)
-
-	lbl_development = Label.new()
-	lbl_development.text = "Development: 0"
-	faction_vbox.add_child(lbl_development)
-
-	lbl_territory = Label.new()
-	lbl_territory.text = "Territory: 0"
-	faction_vbox.add_child(lbl_territory)
+	lbl_stats = Label.new()
+	lbl_stats.text = "Year 1  |  FPS: --"
+	stats_inner.add_child(lbl_stats)
 
 	# ── Action Panel (bottom-center) ──
 	var action_margin := MarginContainer.new()
@@ -205,31 +156,7 @@ func _build_ui() -> void:
 	info_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
 	add_child(info_label)
 
-func _make_resource_label(initial_text: String, parent: Control) -> Label:
-	var lbl := Label.new()
-	lbl.text = initial_text
-	parent.add_child(lbl)
-	return lbl
-
 # ─── Updates ─────────────────────────────────────────────────────────
-
-func _update_resources() -> void:
-	if lbl_wood:
-		lbl_wood.text = "Wood: %d" % player_faction.get_resource(GameData.ResourceType.WOOD)
-	if lbl_gold:
-		lbl_gold.text = "Gold: %d" % player_faction.get_resource(GameData.ResourceType.GOLD)
-	if lbl_ore:
-		lbl_ore.text = "Ore: %d" % player_faction.get_resource(GameData.ResourceType.ORE)
-	if lbl_stone:
-		lbl_stone.text = "Stone: %d" % player_faction.get_resource(GameData.ResourceType.STONE)
-
-func _update_faction_info() -> void:
-	if lbl_population:
-		lbl_population.text = "Population: %d" % player_faction.units.size()
-	if lbl_development:
-		lbl_development.text = "Development: %d" % player_faction.development_level
-	if lbl_territory:
-		lbl_territory.text = "Territory: %d tiles" % player_faction.territory_tiles.size()
 
 func _update_action_buttons() -> void:
 	# Update spawn button visual state
@@ -244,8 +171,13 @@ func _update_action_buttons() -> void:
 func _update_build_button(btn: Button, btype: GameData.BuildingType) -> void:
 	if btn == null:
 		return
+	var pf: Faction = building_placer.player_faction if building_placer != null else null
+	if pf == null:
+		btn.disabled = true
+		btn.modulate = Color(0.5, 0.5, 0.5)
+		return
 	var def: Dictionary = GameData.BUILDING_DEFS[btype]
-	var can_afford: bool = player_faction.can_afford(def["cost"])
+	var can_afford: bool = pf.can_afford(def["cost"])
 	btn.disabled = not can_afford
 	btn.modulate = Color.WHITE if can_afford else Color(0.5, 0.5, 0.5)
 

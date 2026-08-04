@@ -21,7 +21,7 @@ func toggle() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_spawn_mode:
 		return
-	if world == null or player_faction == null:
+	if world == null:
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -37,7 +37,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Spawn unit at the clicked position
 		var unit := Unit.create(player_faction, mouse_world_pos, world)
 		world.add_child(unit)
-		player_faction.units.append(unit)
-		unit_spawned.emit(unit)
+		if player_faction != null:
+			player_faction.units.append(unit)
 
+		var gm = world.get_node_or_null("GameManager")
+		if gm != null and gm.has_method("register_unit"):
+			gm.register_unit(unit)
+
+		unit_spawned.emit(unit)
 		get_viewport().set_input_as_handled()
